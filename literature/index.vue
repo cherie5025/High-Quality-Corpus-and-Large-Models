@@ -1,3 +1,4 @@
+//index.vue
 <template>
   <div class="literature-upload-container">
     <!-- 父内容：仅在非子路由时显示 -->
@@ -287,9 +288,6 @@
 <script>
 import axios from 'axios'
 
-// 后端 API 基础地址
-const API_BASE_URL = 'http://localhost:3007'
-
 export default {
   name: 'LiteratureUpload',
   data() {
@@ -329,7 +327,7 @@ export default {
   computed: {
     isChildRoute() {
       const path = this.$route.path
-      return path.startsWith('/view/literature/') && path !== '/view/literature'
+      return path.startsWith('/platform/literature/') && path !== '/platform/literature'
     }
   },
   mounted() {
@@ -395,7 +393,7 @@ export default {
       const formData = new FormData()
       formData.append('file', this.currentFile.raw)
       try {
-        const response = await axios.post(`${API_BASE_URL}/api/upload`, formData)
+        const response = await axios.post('/api/upload', formData)
         if (response.data.success) {
           this.uploadStatus = { type: 'success', message: '上传成功！共 ' + response.data.totalCount + ' 条记录' }
           this.handlePageChange(1)
@@ -416,7 +414,7 @@ export default {
       this.currentPage = page
       this.loading = true
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/data`, {
+        const response = await axios.get('/api/data', {
           params: { page: page, pageSize: this.pageSize }
         })
         this.tableData = response.data.data
@@ -436,14 +434,14 @@ export default {
     async fetchManualData(page = this.manualCurrentPage) {
       this.manualLoading = true
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/manual-data`, {
+        const response = await axios.get('/api/manual-data', {
           params: { page, pageSize: this.manualPageSize }
         })
         this.manualTableData = response.data.data
         this.manualTotalCount = response.data.totalCount
       } catch (error) {
         console.error('获取手动数据错误:', error)
-        this.$message.error('获取手动数据失败，请确保后端服务已启动')
+        this.$message.error('获取手动数据失败')
       } finally {
         this.manualLoading = false
       }
@@ -465,7 +463,7 @@ export default {
         return
       }
       try {
-        const response = await axios.post(`${API_BASE_URL}/api/manual`, this.manualForm)
+        const response = await axios.post('/api/manual', this.manualForm)
         if (response.data.success) {
           this.$message.success('文献已保存')
           this.resetManualForm()
@@ -476,7 +474,7 @@ export default {
         }
       } catch (error) {
         console.error('手动录入错误:', error)
-        this.$message.error('保存失败，请检查后端服务')
+        this.$message.error('保存失败')
       }
     },
     resetManualForm() {
@@ -500,13 +498,14 @@ export default {
       }
       this.dialogVisible = false
       this.$router.push({
-        path: '/view/literature/credibility',
+        path: '/platform/literature/credibility',
         query: { id }
       })
     }
   }
 }
 </script>
+
 
 <style scoped>
 /* ========== 全局重置 ========== */
