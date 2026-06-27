@@ -35,6 +35,8 @@ CREATE TABLE author_acc (
     author_name VARCHAR(200) PRIMARY KEY,  -- 标准化作者名
     acc FLOAT                              -- 作者综合影响力
 );
+
+
 二、API 接口列表（共 10 个）
 基础 URL: http://localhost:3007
 方法	路径	说明	请求参数
@@ -48,3 +50,8 @@ GET	/api/author-contribution/:id	作者贡献度表格	路径参数: id
 GET	/api/date-range	文献日期范围	无
 GET	/api/network-data	作者合作网络数据	无
 POST	/api/compute-all	触发批量计算	无
+
+三、API 使用的数据集
+mydata.xlsx（暂且只有这一个）
+共计52例。
+
