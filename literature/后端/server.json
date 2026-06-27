@@ -1,0 +1,207 @@
+const express = require('express');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const PORT = 3000;
+
+// 启用CORS
+app.use(cors());
+app.use(express.json());
+
+// 配置文件上传
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, 'uploads');
+    // 确保上传目录存在
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // 使用时间戳+原文件名，避免重名
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    // 只允许上传Excel文件
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv' // .csv
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('只支持上传Excel文件(.xlsx, .xls)或CSV文件'));
+    }
+  },
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 限制50MB
+  }
+});
+
+// 存储上传的文件数据
+let uploadedData = {
+  fileName: '',
+  headers: [],
+  data: [],
+  totalCount: 0
+};
+
+// 上传接口
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '没有上传文件' });
+    }
+
+    const filePath = req.file.path;
+    const fileExt = path.extname(req.file.originalname).toLowerCase();
+
+    // 读取Excel文件
+    let workbook;
+    if (fileExt === '.csv') {
+      workbook = XLSX.readFile(filePath, { type: 'file', raw: true });
+    } else {
+      workbook = XLSX.readFile(filePath);
+    }
+
+    // 获取第一个工作表
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    // 将工作表转换为JSON
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    if (jsonData.length === 0) {
+      return res.status(400).json({ error: '文件内容为空' });
+    }
+
+    // 第一行作为表头
+    const headers = jsonData[0];
+    
+    // 剩余行作为数据
+    const rows = jsonData.slice(1).map((row, index) => {
+      const rowData = {};
+      headers.forEach((header, i) => {
+        let value = row[i] !== undefined ? row[i] : '';
+        if (typeof value === 'string') {
+          value = value.trim();
+        }
+        rowData[header] = value;
+      });
+      rowData._originalIndex = index;
+      return rowData;
+    }).filter(row => {
+      return Object.values(row).some(val => val !== '' && val !== null && val !== undefined);
+    });
+
+    // 存储数据
+    uploadedData = {
+      fileName: req.file.originalname,
+      headers: headers,
+      data: rows,
+      totalCount: rows.length
+    };
+
+    // 删除临时文件
+    fs.unlinkSync(filePath);
+
+    // 返回前10条数据
+    const pageData = rows.slice(0, 10);
+
+    res.json({
+      success: true,
+      message: '文件上传成功',
+      fileName: req.file.originalname,
+      headers: headers,
+      data: pageData,
+      totalCount: rows.length,
+      currentPage: 1,
+      pageSize: 10,
+      totalPages: Math.ceil(rows.length / 10)
+    });
+
+  } catch (error) {
+    console.error('上传处理错误:', error);
+    res.status(500).json({ 
+      error: '文件处理失败', 
+      details: error.message 
+    });
+  }
+});
+
+// 获取分页数据接口
+app.get('/api/data', (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    
+    if (uploadedData.data.length === 0) {
+      return res.json({
+        data: [],
+        totalCount: 0,
+        currentPage: page,
+        pageSize: pageSize,
+        totalPages: 0,
+        headers: []
+      });
+    }
+
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const pageData = uploadedData.data.slice(start, end);
+
+    res.json({
+      data: pageData,
+      totalCount: uploadedData.totalCount,
+      currentPage: page,
+      pageSize: pageSize,
+      totalPages: Math.ceil(uploadedData.totalCount / pageSize),
+      headers: uploadedData.headers,
+      fileName: uploadedData.fileName
+    });
+  } catch (error) {
+    console.error('获取数据错误:', error);
+    res.status(500).json({ error: '获取数据失败' });
+  }
+});
+
+// 获取单条数据详情
+app.get('/api/data/:index', (req, res) => {
+  try {
+    const index = parseInt(req.params.index);
+    if (isNaN(index) || index < 0 || index >= uploadedData.data.length) {
+      return res.status(404).json({ error: '数据不存在' });
+    }
+    
+    res.json({
+      data: uploadedData.data[index],
+      index: index
+    });
+  } catch (error) {
+    console.error('获取详情错误:', error);
+    res.status(500).json({ error: '获取详情失败' });
+  }
+});
+
+// 健康检查接口
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: '服务器运行正常' });
+});
+
+// 启动服务器
+app.listen(PORT, () => {
+  console.log(`服务器运行在 http://localhost:${PORT}`);
+  console.log(`上传接口: http://localhost:${PORT}/api/upload`);
+  console.log(`数据接口: http://localhost:${PORT}/api/data`);
+});
