@@ -27,4 +27,4 @@ server/
 │   ├── data_utils.py            // 数据工具
 │   └── requirements.txt         // Python 依赖列表
 │
-└── uploads/                     // 上传临时目录（空文件夹，不需要打包）
+└── uploads/                     // 上传临时目录
